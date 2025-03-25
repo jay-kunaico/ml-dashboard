@@ -1,3 +1,4 @@
+import React from "react";
 import "./index.css";
 import { useEffect, useState } from "react";
 import DataSelector from "./components/DataSelector";
@@ -5,24 +6,98 @@ import AlgorithmSelector from "./components/AlgorithmSelector";
 import TrainingDataSelector from "./components/TrainingData";
 import TargetDataSelector from "./components/TargetData";
 import Results from "./components/Results";
+import { dataSources, algorithms } from "./constants/constants";
 import { fetchData, runAlgorithm } from "./services/service";
 import Spinner from "./components/Spinner";
+import type { ResultType } from "./types/types";
+import Modal from "./components/modal";
+import Accordion from "./components/accordian";
+import { terminology } from "./constants/terminology";
 
-const dataSources = [
-	"cc_fraud.csv",
-	"customers.csv",
-	"customer_churn.csv",
-	"credit_score.csv",
-	"credit_risk.csv",
-];
-const algorithms = [
-	"Linear Regression",
-	"Decision Tree",
-	"K-Nearest Neighbors",
-	"Logistic Regression",
-	"XGBoost",
-	"Random Forest",
-];
+const DataTable = React.memo(
+	({
+		data,
+		columnKeys,
+	}: { data: Record<string, string>[]; columnKeys: string[] }) => {
+		const [sortedData, setSortedData] = useState(data);
+		const [sortConfig, setSortConfig] = useState<{
+			key: string;
+			direction: "asc" | "desc";
+		} | null>(null);
+
+		useEffect(() => {
+			setSortedData(data);
+		}, [data]);
+
+		// Handle sorting when a column header is clicked
+		const handleSort = (key: string) => {
+			let direction: "asc" | "desc" = "asc";
+			if (
+				sortConfig &&
+				sortConfig.key === key &&
+				sortConfig.direction === "asc"
+			) {
+				direction = "desc";
+			}
+
+			const sorted = [...data].sort((a, b) => {
+				if (a[key] === null || b[key] === null) return 0; // Handle null values
+				if (typeof a[key] === "number" && typeof b[key] === "number") {
+					return direction === "asc" ? a[key] - b[key] : b[key] - a[key];
+				}
+				return direction === "asc"
+					? String(a[key]).localeCompare(String(b[key]))
+					: String(b[key]).localeCompare(String(a[key]));
+			});
+
+			setSortedData(sorted);
+			setSortConfig({ key, direction });
+		};
+
+		return (
+			<div className="overflow-x-auto w-full rounded-xl border border-gray-400 bg-gray-300 mt-6 max-h-[calc(100vh-350px)] overflow-y-auto">
+				<table className="w-full border-collapse">
+					{/* Table Header */}
+					<thead className="sticky top-0 bg-gray-200 z-10">
+						<tr>
+							{columnKeys.map((col) => (
+								<th key={col} className="border border-gray-500 bg-white p-2">
+									<button
+										type="button"
+										onClick={() => handleSort(col)} // Add sorting on click
+										className="w-full text-left focus:outline-none focus:ring focus:ring-blue-500 focus:ring-offset-2 rounded"
+									>
+										<div className="flex items-center justify-between">
+											<span>{col}</span>
+											{/* Show sort direction indicator */}
+											{sortConfig?.key === col && (
+												<span>
+													{sortConfig.direction === "asc" ? "🔼" : "🔽"}
+												</span>
+											)}
+										</div>
+									</button>
+								</th>
+							))}
+						</tr>
+					</thead>
+					{/* Table Body */}
+					<tbody>
+						{sortedData.map((row, rowIndex) => (
+							<tr key={row.id || rowIndex}>
+								{columnKeys.map((col) => (
+									<td key={col} className="border border-gray-500 p-2">
+										{row[col]}
+									</td>
+								))}
+							</tr>
+						))}
+					</tbody>
+				</table>
+			</div>
+		);
+	},
+);
 
 function App() {
 	const [selectedDataSource, setSelectedDataSource] = useState("");
@@ -31,13 +106,19 @@ function App() {
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [loadingResults, setLoadingResults] = useState(false);
-	const [response, setResponse] = useState<any>(null);
+
+	const [response, setResponse] = useState<ResultType | null>(null);
 	const [columns, setColumns] = useState<string[]>([]);
 	const [firstRow, setFirstRow] = useState<string[]>([]);
 	const [trainingColumns, setTrainingColumns] = useState<string[]>([]);
 	const [targetColumn, setTargetColumn] = useState<string>("");
+	const columnKeys = data.length > 0 ? Object.keys(data[0]) : [];
+	const [isModalOpen, setIsModalOpen] = useState(false);
 
-	const handleLoadData = async (mode: "preview" | "full") => {
+	const openModal = () => setIsModalOpen(true);
+	const closeModal = () => setIsModalOpen(false);
+
+	const handleLoadData = async () => {
 		if (!selectedDataSource) {
 			setError("Please select a data source");
 			return;
@@ -46,7 +127,7 @@ function App() {
 		setError(null);
 
 		try {
-			const response = await fetchData(selectedDataSource, mode);
+			const response = await fetchData(selectedDataSource);
 			setData(response);
 			setError(null);
 			setLoading(false);
@@ -56,12 +137,16 @@ function App() {
 	};
 
 	useEffect(() => {
-		if (selectedDataSource) {
-			fetchData(selectedDataSource, "preview").then((data) => {
-				setColumns(Object.keys(data[0]));
-				setFirstRow(Object.values(data[0]));
-			});
-		}
+		const timeout = setTimeout(() => {
+			if (selectedDataSource) {
+				fetchData(selectedDataSource).then((data) => {
+					setColumns(Object.keys(data[0]));
+					setFirstRow(Object.values(data[0]));
+				});
+			}
+		}, 300); // Debounce by 300ms
+
+		return () => clearTimeout(timeout);
 	}, [selectedDataSource]);
 
 	const handleRunAlgorithm = async () => {
@@ -78,6 +163,7 @@ function App() {
 				trainingColumns,
 				targetColumn,
 				selectedAlgorithm,
+				selectedDataSource,
 			);
 			setResponse(response);
 
@@ -88,38 +174,86 @@ function App() {
 			setError(null);
 			setLoadingResults(false);
 		} catch (error) {
-			console.error("Error:", error);
+			console.error("Eerror:", error);
+
+			if (error instanceof Error) {
+				setError(error.message);
+				console.log("eError", error);
+				console.log("response", response);
+			} else {
+				setError("An unknown error occurred");
+			}
+			setLoadingResults(false);
 		}
 	};
 
 	return (
-		<div className="min-h-screen flex flex-col items-center bg-gray-100 p-4">
-			<div className="mb-6">
-				<h1 className="text-3xl font-bold">Machine Learning Playground</h1>
-			</div>
+		<main className="min-h-screen flex flex-col items-center bg-gray-100 p-4">
+			<h1 className="mb-6">
+				<button
+					type="button"
+					className="text-3xl font-bold"
+					title="Click to open a modal for information and terminology"
+					onClick={openModal}
+					aria-expanded={isModalOpen}
+					aria-controls="ml-terminology-modal"
+					tabIndex={0}
+					onKeyDown={(e) => {
+						if (e.key === "Enter" || e.key === " ") openModal(); // Handle keyboard interaction
+					}}
+				>
+					Machine Learning Playground
+				</button>
+			</h1>
+			<Modal isOpen={isModalOpen} onClose={closeModal}>
+				<h2 className="text-xl font-bold mb-4">About This Application</h2>
+				<p>
+					This app implements a Flask-based backend for running machine learning
+					algorithms on a dataset. It provides endpoints for loading data,
+					preprocessing it, and applying machine learning algorithms.
+				</p>
+				<p className="mt-4">
+					Use the interface to select a dataset, choose features and a target
+					variable, and run a machine learning model to see the results.
+				</p>
+				<Accordion items={terminology} />
+			</Modal>
 			<div className="flex flex-row space-x-4 mb-6">
 				<DataSelector
 					dataSources={dataSources}
 					selectedDataSource={selectedDataSource}
 					onSelect={setSelectedDataSource}
-				/>
-				<AlgorithmSelector
-					algorithms={algorithms}
-					selectedAlgorithm={selectedAlgorithm}
-					onSelect={setSelectedAlgorithm}
+					label="Choose Dataset"
 				/>
 				<TrainingDataSelector
 					dataSources={firstRow}
 					columns={columns}
 					selectedColumns={trainingColumns}
 					onSelect={setTrainingColumns}
+					label="Select Features"
 				/>
 				<TargetDataSelector
 					columns={columns}
 					targetColumn={targetColumn}
 					onSelect={setTargetColumn}
+					label="Select Target"
 				/>
-				<Results response={response} loadingResults={loadingResults} />
+				<AlgorithmSelector
+					algorithms={[
+						...algorithms.classifiers,
+						...algorithms.regressors,
+						...algorithms.clustering,
+					]}
+					selectedAlgorithm={selectedAlgorithm}
+					onSelect={setSelectedAlgorithm}
+					label="Choose Model"
+				/>
+
+				<Results
+					response={response}
+					loadingResults={loadingResults}
+					error={error}
+				/>
 			</div>
 			{/* {error && <div className="text-red-500 text-lg mb-4">{error}</div>} */}
 			<div className="h-6 space-x-4"> {loading && <Spinner />}</div>
@@ -127,54 +261,33 @@ function App() {
 			<div className="flex flex-row space-x-4">
 				<button
 					type="button"
-					onClick={handleLoadData.bind(null, "preview")}
-					className="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition"
-					disabled={!selectedDataSource || loading}
-				>
-					Get Preview
-				</button>
-				<button
-					type="button"
-					onClick={handleLoadData.bind(null, "full")}
-					className="bg-purple-500 text-white px-6 py-2 rounded-lg hover:bg-purple-600 transition"
+					onClick={handleLoadData}
+					className={`px-6 py-2 rounded-lg transition ${
+						selectedDataSource
+							? "bg-blue-300 text-gray-800 hover:bg-blue-400"
+							: "bg-gray-200 text-gray-600 cursor-not-allowed"
+					}`}
 					disabled={!selectedDataSource}
 				>
-					Get Data
+					Load Dataset
 				</button>
+
+				{/* Primary Action: Run Model */}
 				<button
 					type="button"
 					onClick={handleRunAlgorithm}
-					className="bg-green-500 text-white px-6 py-2 rounded-lg hover:bg-green-600 transition"
+					className={`px-6 py-2 rounded-lg transition ${
+						selectedDataSource && selectedAlgorithm
+							? "bg-blue-600 text-white hover:bg-blue-800"
+							: "bg-gray-200 text-gray-600 cursor-not-allowed"
+					}`}
 					disabled={!selectedDataSource || !selectedAlgorithm}
 				>
-					Run Algorithm
+					Run Model
 				</button>
 			</div>
-
-			<table className="table-auto w-full mt-4 border-collapse border-2 border-gray-600">
-				<thead>
-					<tr>
-						{data.length > 0 &&
-							Object.keys(data[0]).map((col) => (
-								<th key={col} className="border border-gray-500 bg-slate-100">
-									{col}
-								</th>
-							))}
-					</tr>
-				</thead>
-				<tbody>
-					{data.map((row) => (
-						<tr key={row.id || JSON.stringify(row)}>
-							{Object.keys(row).map((col) => (
-								<td key={col} className="border border-gray-500">
-									{row[col]}
-								</td>
-							))}
-						</tr>
-					))}
-				</tbody>
-			</table>
-		</div>
+			<DataTable data={data} columnKeys={columnKeys} />
+		</main>
 	);
 }
 

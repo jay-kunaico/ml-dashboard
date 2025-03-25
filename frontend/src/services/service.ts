@@ -1,18 +1,8 @@
+import type { ResultType } from "../types/types";
+
 const BASE_URL = 'http://127.0.0.1:5000';
 
-export interface AlgorithmResponse {
-	model: string;
-	size: number;
-	results: {
-		mse: number;
-		r2: number;
-		f1_score: number;
-		accuracy: number;
-	};
-	predictions: string[];
-	dataframe: Record<string, string>[]; // Array of objects representing the updated dataframe
-}
-export const fetchData = async (url: string, mode: string) => {
+export const fetchData = async (url: string) => {
 	try {
 		const response = await fetch(`${BASE_URL}/load_data`, {
 			method: 'POST',
@@ -21,7 +11,6 @@ export const fetchData = async (url: string, mode: string) => {
 			},
 			body: JSON.stringify({
 				filename: url,
-				mode: mode
 			}),
 		});
 
@@ -39,11 +28,9 @@ export const fetchData = async (url: string, mode: string) => {
 export const runAlgorithm = async (
 	trainColumns: string[],
 	targetColumn: string,
-	algorithm: string
-): Promise<AlgorithmResponse> => {
-	console.log('trainColumns:', trainColumns);
-	console.log('targetColumn:', targetColumn);
-	console.log('algorithm:', algorithm);
+	algorithm: string,
+	url: string,
+): Promise<ResultType> => {
 
 	try {
 		const response = await fetch(`${BASE_URL}/run_algorithm`, {
@@ -55,12 +42,23 @@ export const runAlgorithm = async (
 				trainColumns: trainColumns,
 				targetColumn: targetColumn,
 				algorithm: algorithm,
+				filename: url,
 			}),
 		});
 		if (!response.ok) {
-			throw new Error(`Network response was not ok: ${response.statusText}`);
+			let errorMessage = await response.text();
+			if (errorMessage.includes('base_score must be in (0,1)')) {
+				errorMessage = 'The base score must be in (0,1) for logistic loss.';
+			}
+			else if (errorMessage.includes(':')) {
+				const parts = errorMessage.split(':');
+				errorMessage = parts[1].trim();
+			}
+			errorMessage = errorMessage.replace(/["'{}[\]()]/g, '');
+			const truncatedErrorMessage = errorMessage.length > 100 ? `${errorMessage.substring(0, 200)}...` : errorMessage;
+			throw new Error(truncatedErrorMessage);
 		}
-		const data: AlgorithmResponse = await response.json();
+		const data: ResultType = await response.json();
 		return data;
 	} catch (error) {
 		console.error('Error:', error);
