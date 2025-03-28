@@ -10,7 +10,7 @@ import { dataSources, algorithms } from "./constants/constants";
 import { fetchData, runAlgorithm } from "./services/service";
 import Spinner from "./components/Spinner";
 import type { ResultType } from "./types/types";
-import Modal from "./components/modal";
+import HeadlessModal from "./components/headless_modal";
 import Accordion from "./components/accordian";
 import { terminology } from "./constants/terminology";
 
@@ -128,6 +128,7 @@ function App() {
 
 		try {
 			const response = await fetchData(selectedDataSource);
+
 			setData(response);
 			setError(null);
 			setLoading(false);
@@ -179,7 +180,6 @@ function App() {
 			if (error instanceof Error) {
 				setError(error.message);
 				console.log("eError", error);
-				console.log("response", response);
 			} else {
 				setError("An unknown error occurred");
 			}
@@ -205,8 +205,11 @@ function App() {
 					Machine Learning Playground
 				</button>
 			</h1>
-			<Modal isOpen={isModalOpen} onClose={closeModal}>
-				<h2 className="text-xl font-bold mb-4">About This Application</h2>
+			<HeadlessModal
+				isOpen={isModalOpen}
+				onClose={closeModal}
+				title="About This Application"
+			>
 				<p>
 					This app implements a Flask-based backend for running machine learning
 					algorithms on a dataset. It provides endpoints for loading data,
@@ -217,7 +220,7 @@ function App() {
 					variable, and run a machine learning model to see the results.
 				</p>
 				<Accordion items={terminology} />
-			</Modal>
+			</HeadlessModal>
 			<div className="flex flex-row space-x-4 mb-6">
 				<DataSelector
 					dataSources={dataSources}

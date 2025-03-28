@@ -4,6 +4,8 @@ export const dataSources = [
 	"credit_score.csv",
 	"credit_risk.csv",
 	"cc_fraud.csv",
+	"credit_card_fraud.csv",
+	"card_transdata.csv",
 ];
 
 // Algorithms grouped by type

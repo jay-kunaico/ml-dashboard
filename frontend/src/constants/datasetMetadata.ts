@@ -5,6 +5,18 @@ export const datasetMetadata = {
 		models: ["Logistic Regression", "Random Forest", "Decision Tree", "XGBoost", "K-Nerest Neighbors"],
 		description: "This dataset is used for classification whether a transaction is fraudulent or not.",
 	},
+	"card_transdata.csv": {
+		bestFeatures: ["distance_from_home", "distance_from_last_transaction", "online_order", "ratio_to_median_purchase_price", "repeat_retailier", "used_chip", "used_pin_number"],
+		targetField: "fraud",
+		models: ["Logistic Regression", "Random Forest", "Decision Tree", "XGBoost", "K-Nerest Neighbors"],
+		description: "This dataset is used for classification whether a transaction is fraudulent or not.",
+	},
+	"credit_card_fraud.csv": {
+		bestFeatures: ["distance_from_home", "distance_from_last_transaction", "online_order", "ratio_to_median_purchase_price", "repeat_retailier", "used_chip", "used_pin_number"],
+		targetField: "fraud",
+		models: ["Logistic Regression", "Random Forest", "Decision Tree", "XGBoost", "K-Nerest Neighbors"],
+		description: "This is a combination of cc_fraud and card_transdata datasets.",
+	},
 	"credit_risk.csv": {
 		bestFeatures: ["Age", "Checking_account", "credit_amount,", "duration", "houseing", "job", "purpose", "savings_account", "sex"],
 		targetField: "Leave Blank",

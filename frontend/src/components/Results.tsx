@@ -22,11 +22,11 @@ const Results = ({ response, loadingResults, error }: ResultsProps) => {
 						{response?.results?.message && (
 							<div>{response.results?.message}</div>
 						)}
-
+						{/* TODO move tooltips to a constant */}
 						{response?.results?.mse != null && (
 							<div
 								className="relative group"
-								title="the average squared difference between the estimated values and the true value. The smaller the value, the better the model."
+								title="The average squared difference between the estimated values and the true value. The smaller the value, the better the model."
 							>
 								<a
 									href="https://en.wikipedia.org/wiki/Mean_squared_error"
@@ -40,7 +40,7 @@ const Results = ({ response, loadingResults, error }: ResultsProps) => {
 						{response?.results?.r2 != null && (
 							<div
 								className="relative group"
-								title="the coefficient of determination, denoted R2 or r2 and pronounced R squared, is the proportion of the variation in the dependent variable that is predictable from the independent variable(s)."
+								title="R2 ranges from 0 to 1.  A value of 1 indicates that the model explains all of the variance in the target variable. A value of 0 indicates that the model does not explain any of the variance in the target variable. R2 can be negative if the model is worse than predicting the mean of the target variable."
 							>
 								<a
 									href="https://en.wikipedia.org/wiki/Coefficient_of_determination"
@@ -54,7 +54,7 @@ const Results = ({ response, loadingResults, error }: ResultsProps) => {
 						{response?.results?.f1_score != null && (
 							<div
 								className="relative group"
-								title="The F1 score is the harmonic mean of the precision and recall. It thus symmetrically represents both precision and recall in one metric.."
+								title="The F1 score balances precision and recall, a good measure of a models accuracy. It ranges from 0 (worst) to 1 (best) and considers false positives and false negatives."
 							>
 								<a
 									href="https://en.wikipedia.org/wiki/F-score"
@@ -66,7 +66,7 @@ const Results = ({ response, loadingResults, error }: ResultsProps) => {
 							</div>
 						)}
 						{response?.results?.accuracy != null && (
-							<div title="accuracy score is a classification metric that measures the fraction of correct predictions a model makes, calculated by dividing the number of correct predictions by the total number of predictions.">
+							<div title="Accuracy score is a classification metric that measures the fraction of correct predictions a model makes, calculated by dividing the number of correct predictions by the total number of predictions.">
 								<a
 									href="https://scikit-learn.org/stable/modules/generated/sklearn.metrics.accuracy_score.html"
 									target="_blank"

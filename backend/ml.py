@@ -21,18 +21,28 @@ CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True, max_ag
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
+#Pydantic Models
+class Data(BaseModel):
+    filename: str
 
+class Algorithm(BaseModel):
+    filename: str   
+    algorithm: str
+    trainColumns: list[str]
+    targetColumn: str   
 
-@app.before_request
-def log_request_info():
-    if(request.method == 'OPTIONS'):
-        response = make_response()
-        response.headers['Access-Control-Allow-Origin'] = '*'
-        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-        return response
-    logging.info(f"Request: {request.method} {request.url}")
-    logging.debug(f"Headers: {request.headers}")
+# Attempts to address CORS issue in preflight
+# flask-cors does this for us
+# @app.before_request
+# def log_request_info():
+#     if(request.method == 'OPTIONS'):
+#         response = make_response()
+#         response.headers['Access-Control-Allow-Origin'] = '*'
+#         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+#         response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+#         return response
+#     logging.info(f"Request: {request.method} {request.url}")
+#     logging.debug(f"Headers: {request.headers}")
 
 # Path to data
 CSV_FOLDER = os.path.join(os.path.dirname(__file__), 'data')
@@ -52,124 +62,94 @@ def read_csv_internal(filename):
 
 @app.route('/load_data', methods=['POST'])
 def load_preview():
-    data = request.json
-    filename = data.get('filename')
-
-    if not filename:
-        return jsonify({"error": "Filename is required"}), 400
-
-    file_path = os.path.join(CSV_FOLDER, filename)
-
-    if not os.path.exists(file_path):
-        return jsonify({"error": f"File '{filename}' not found"}), 404
-
     try:
-        df = pd.read_csv(file_path)
-        df = df.where(pd.notnull(df), None)
+        data = Data.model_validate(request.json)
+        df = read_csv_internal(data.filename)
+        # Only return 100 rows to preview data
         result = df.head(100).to_dict(orient='records')
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    
+      
 
 @app.route('/run_algorithm', methods=['POST'])
 def run_algorithm():
-    data = request.json
-    filename = data.get('filename')  
-    algorithm = data.get('algorithm')
-    train_columns = data.get('trainColumns')
-    target_column = data.get('targetColumn')
-
-    if not filename:
-        return jsonify({"error": "Filename is required"}), 400
-    if not algorithm:
-        return jsonify({"error": "Algorithm is required"}), 400
-    if not train_columns:
-        return jsonify({"error": "Train columns are required"}), 400
-
     try:
-        df = read_csv_internal(filename)
+        data = Algorithm.model_validate(request.json)
+        df = read_csv_internal(data.filename)
 
-        if not target_column:
-            target_column = 'cluster' if algorithm in ["K-Means", "DBSCAN", "Agglomerative Clustering", "Birch"] else 'prediction'
-            df[target_column] = 0  # Initialize the column with 0
+        model_mapping = {
+            'Decision Tree': DecisionTreeClassifier,
+            'Decision Tree Regressor': lambda: DecisionTreeRegressor(max_depth=5),
+            'K-Nearest Neighbors': lambda: KNeighborsClassifier(n_neighbors=5),
+            'K-Nearest Neighbors Regressor': lambda: KNeighborsRegressor(n_neighbors=5),
+            'Random Forest': RandomForestClassifier,
+            'Random Forest Regressor': RandomForestRegressor,
+            'Logistic Regression': lambda: LogisticRegression(max_iter=1000),
+            'XGBoost': lambda: XGBClassifier(use_label_encoder=False, eval_metric='logloss'),
+            'K-Means': lambda: KMeans(n_clusters=5, random_state=42),
+            'Agglomerative Clustering': lambda: AgglomerativeClustering(n_clusters=5),
+            'DBSCAN': lambda: DBSCAN(eps=0.5, min_samples=5),
+            'Birch': lambda: Birch(n_clusters=5)
+        }
+
+        if data.algorithm not in model_mapping:
+            return jsonify({"error": "Invalid algorithm"}), 400
+
+        model = model_mapping[data.algorithm]()
+
+        unsupervised_algorithms = ['K-Means', 'DBSCAN', 'Agglomerative Clustering', 'Birch']
+        target_column = data.targetColumn if data.algorithm not in unsupervised_algorithms else 'cluster'
+        # df[target_column] = 0  # Initialize the column with 0.  this causes an error 
 
         # Drop date column if necessary
-        if 'TransactionDate' in train_columns:
-            train_columns.remove('TransactionDate')
+        if 'TransactionDate' in data.trainColumns:
+            data.trainColumns.remove('TransactionDate')
         if 'TransactionDate' == target_column:
             return jsonify({"error": "TransactionDate cannot be the target column"}), 400
 
-        # Splitting the data
-        X = df[train_columns]
+        # Splitting the data standard step in Machine Learning
+        X = df[data.trainColumns].drop(columns=[target_column], errors='ignore')
         y = df[target_column] if target_column in df.columns else None
 
         # Identify categorical and numerical columns
         categorical_cols = X.select_dtypes(include=['object']).columns.tolist()
         numerical_cols = X.select_dtypes(include=['number']).columns.tolist()
 
-        unsupervised_algorithms = ['K-Means', 'DBSCAN', 'Agglomerative Clustering', 'Birch']
-        if algorithm in unsupervised_algorithms:
+       
+        if data.algorithm in unsupervised_algorithms:
             y_train, y_test = None, None
         else:   
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
-        # Preprocessing pipeline
+        if y_train is not None and len(y_train.unique()) < 2:
+            return jsonify({"error": "The training data must contain at least two classes."}), 400
+        
         preprocessor = ColumnTransformer(
             transformers=[
                 ('num', StandardScaler(), numerical_cols),
                 ('cat', OneHotEncoder(handle_unknown='ignore', sparse_output=False), categorical_cols)
             ])
 
-        model = None
-
-        # Initialize the model
-        if algorithm == 'Decision Tree':
-            model = DecisionTreeClassifier()
-        elif algorithm == "Decision Tree Regressor":
-            model = DecisionTreeRegressor(max_depth=5)
-        elif algorithm == 'K-Nearest Neighbors':
-            model = KNeighborsClassifier(n_neighbors=5)
-        elif algorithm == 'K-Nearest Neighbors Regressor':
-            model = KNeighborsRegressor(n_neighbors=5)
-        elif algorithm == 'Random Forest':
-            model = RandomForestClassifier()
-        elif algorithm == 'Random Forest Regressor':
-            model = RandomForestRegressor()
-        elif algorithm == 'Logistic Regression':
-            model = LogisticRegression(max_iter=1000)
-        elif algorithm == 'XGBoost':
-            model = XGBClassifier(use_label_encoder=False, eval_metric='logloss')
-        elif algorithm == 'K-Means':
-            model = KMeans(n_clusters=5, random_state=42)
-        elif algorithm == 'Agglomerative Clustering':
-            model = AgglomerativeClustering(n_clusters=5)
-        elif algorithm == 'DBSCAN':
-            model = DBSCAN(eps=0.5, min_samples=5)
-        elif algorithm == 'Birch':
-            model = Birch(n_clusters=5)
-        else:
-            return jsonify({"error": "Invalid algorithm"}), 400
-
-        # Create pipeline
+        # Create a pipeline
         pipeline = Pipeline([
             ('preprocessor', preprocessor),
             ('model', model)
         ])
 
-        # Fit the model
-        if algorithm in unsupervised_algorithms:
+        # Fit the model / Training and Prediction
+        if data.algorithm in unsupervised_algorithms:
             pipeline.fit(X)
             predictions = pipeline.predict(X) if hasattr(model, 'predict') else pipeline.fit_predict(X)
             df[target_column] = predictions
-            results = {"message": f"{algorithm} Clustering completed"}
+            results = {"message": f"{data.algorithm} Clustering completed"}
         else:
             pipeline.fit(X_train, y_train)
             predictions = pipeline.predict(X_test)
             df.loc[X_test.index, target_column] = predictions
 
-            # Calculate metrics
-            if 'Regressor' in algorithm:
+            #  metrics
+            if 'Regressor' in data.algorithm:
                 mse = mean_squared_error(y_test, predictions)
                 r2 = r2_score(y_test, predictions)
                 results = {'mse': mse, 'r2': r2}
@@ -178,6 +158,7 @@ def run_algorithm():
                 f1 = f1_score(y_test, predictions, average='weighted')
                 results = {'accuracy': accuracy, 'f1_score': f1}
 
+        # Return info to the user.  Limit the number of rows returned to 1000 to avoid overloading the server.  Should add pagination or infinite scrolling. TODO.
         return jsonify({
             'model': model.__class__.__name__,
             'results': results,
@@ -186,13 +167,17 @@ def run_algorithm():
             'size': len(df),
         })
 
+    except ValidationError as ve:
+        logging.error(f"ValidationError: {ve}")
+        return jsonify({"error": str(ve)}), 400
     except FileNotFoundError as e:
+        logging.error(f"FileNotFoundError: {e}")
         return jsonify({"error": str(e)}), 404
     except ValueError as ve:
         logging.error(f"ValueError: {ve}")
         return jsonify({"error": str(ve)}), 400
     except Exception as e:
-        logging.error(f"Error: {e}")
+        logging.error(f"Error: {e}, {len(df)}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':

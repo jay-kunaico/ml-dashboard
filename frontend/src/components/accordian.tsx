@@ -19,11 +19,11 @@ const Accordion = ({ items }: AccordionProps) => {
 	return (
 		<div className="accordion">
 			{items.map((item, index) => (
-				<div key={index} className="mb-2 border rounded-lg">
+				<div key={item.title} className="mb-2 border rounded-lg">
 					<h3>
 						<button
 							type="button"
-							className="w-full text-left p-4 bg-gray-200 hover:bg-gray-300 focus:outline-none focus:ring focus:ring-blue-500"
+							className="flex items-center w-full h-10 text-left p-4 bg-gray-200 hover:bg-gray-300 focus:outline-none focus:ring focus:ring-blue-500"
 							aria-expanded={openIndex === index}
 							aria-controls={`accordion-content-${index}`}
 							onClick={() => handleToggle(index)}
