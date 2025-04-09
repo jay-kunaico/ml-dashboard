@@ -9,16 +9,20 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v43
+      - uses: actions/setup-node@v3
         with:
           node-version: 20
+
+      - name: Navigate to frontend directory
+        run: cd frontend
+        
       - name: Install dependencies
-        run: |
-            cd frontend
-            npm ci
+        run: npm install
+        working-directory: ./frontend
       # - name: Run Lint
       #   run: npm run lint
+      
       - name: Build
         run: npm run build
       - name: Set AWS credentials
