@@ -4,7 +4,7 @@ import {
 	DialogTitle,
 	TransitionChild,
 } from "@headlessui/react";
-import { Fragment, useState } from "react";
+import { Fragment } from "react";
 
 interface ModalProps {
 	isOpen: boolean;
