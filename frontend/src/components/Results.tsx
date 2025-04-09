@@ -66,7 +66,7 @@ const Results = ({ response, loadingResults, error }: ResultsProps) => {
 							</div>
 						)}
 						{response?.results?.accuracy != null && (
-							<div title="Accuracy score is a classification metric that measures the fraction of correct predictions a model makes, calculated by dividing the number of correct predictions by the total number of predictions.">
+							<div title="Accuracy score is a classification metric that measures the fraction of correct predictions a model makes, calculated by dividing the number of correct predictions by the total number of predictions. Closer to 1 is better.">
 								<a
 									href="https://scikit-learn.org/stable/modules/generated/sklearn.metrics.accuracy_score.html"
 									target="_blank"
