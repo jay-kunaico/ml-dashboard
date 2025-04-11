@@ -1,6 +1,7 @@
 import type { ResultType } from "../types/types";
 
 const BASE_URL = import.meta.env.VITE_API_URL;
+console.log("BASE_URL:", BASE_URL);
 
 export const fetchData = async (url: string) => {
 	try {
