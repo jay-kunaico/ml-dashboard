@@ -57,19 +57,17 @@ const DataTable = React.memo(
 		return (
 			<div className="overflow-x-auto w-full rounded-xl border border-gray-400 bg-gray-300 mt-6 max-h-[calc(100vh-350px)] overflow-y-auto">
 				<table className="w-full border-collapse">
-					{/* Table Header */}
 					<thead className="sticky top-0 bg-gray-200 z-10">
 						<tr>
 							{columnKeys.map((col) => (
 								<th key={col} className="border border-gray-500 bg-white p-2">
 									<button
 										type="button"
-										onClick={() => handleSort(col)} // Add sorting on click
+										onClick={() => handleSort(col)}
 										className="w-full text-left focus:outline-none focus:ring focus:ring-blue-500 focus:ring-offset-2 rounded"
 									>
 										<div className="flex items-center justify-between">
 											<span>{col}</span>
-											{/* Show sort direction indicator */}
 											{sortConfig?.key === col && (
 												<span>
 													{sortConfig.direction === "asc" ? "🔼" : "🔽"}
@@ -81,7 +79,6 @@ const DataTable = React.memo(
 							))}
 						</tr>
 					</thead>
-					{/* Table Body */}
 					<tbody>
 						{sortedData.map((row, rowIndex) => (
 							<tr key={row.id || rowIndex}>
