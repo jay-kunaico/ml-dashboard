@@ -1,11 +1,10 @@
 import type { ResultType } from "../types/types";
 
 const BASE_URL = import.meta.env.VITE_API_URL;
-console.log("BASE_URL:", BASE_URL);
 
 export const fetchData = async (url: string) => {
 	try {
-		const response = await fetch(`${BASE_URL}`, {
+		const response = await fetch(`${BASE_URL}/load_data`, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
@@ -18,8 +17,15 @@ export const fetchData = async (url: string) => {
 		if (!response.ok) {
 			throw new Error('Network response was not ok');
 		}
+		const result = await response.json();
 
-		return await response.json();
+		// Handle Lambda API Gateway response (stringified body)
+		if (result.body && typeof result.body === 'string') {
+			return JSON.parse(result.body);
+		}
+
+		// Handle Flask API response (direct JSON)
+		return result;
 	} catch (error) {
 		console.error('Error:', error);
 		throw error;
