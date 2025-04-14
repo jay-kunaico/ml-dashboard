@@ -4,7 +4,7 @@ const BASE_URL = import.meta.env.VITE_API_URL;
 
 export const fetchData = async (url: string) => {
 	try {
-		const response = await fetch(`${BASE_URL}`, {
+		const response = await fetch(`${BASE_URL}/data-loader`, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
