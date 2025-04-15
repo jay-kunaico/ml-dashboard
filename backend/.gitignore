@@ -1,0 +1,30 @@
+# Ignore all Python package install artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+build/
+dist/
+*.egg
+
+# Ignore pip install output
+boto3/
+botocore/
+s3transfer/
+urllib3/
+python_dateutil/
+jmespath/
+dateutil/
+tzdata/
+*.dist-info/
+*.whl
+*.so
+
+# Virtualenvs
+venv/
+.env/
+.venv/
+
+# Ignore Lambda zip files
+*.zip

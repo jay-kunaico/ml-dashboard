@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 from pydantic import BaseModel, ValidationError, Field
+import boto3
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
@@ -15,13 +16,14 @@ from xgboost import XGBClassifier
 from sklearn.metrics import mean_squared_error, r2_score, accuracy_score, f1_score
 import os
 import logging
+from config import ENV,DATA_SOURCE
+from io import StringIO
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True, max_age=600)
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
-#Pydantic Models
 class Data(BaseModel):
     filename: str
 
@@ -31,40 +33,34 @@ class Algorithm(BaseModel):
     trainColumns: list[str]
     targetColumn: str   
 
-# Attempts to address CORS issue in preflight
-# flask-cors does this for us
-# @app.before_request
-# def log_request_info():
-#     if(request.method == 'OPTIONS'):
-#         response = make_response()
-#         response.headers['Access-Control-Allow-Origin'] = '*'
-#         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-#         response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-#         return response
-#     logging.info(f"Request: {request.method} {request.url}")
-#     logging.debug(f"Headers: {request.headers}")
+def read_data(filename):
+    if ENV == 'cloud':
+        s3 = boto3.client('s3')
+        try:
+            # Download the file from S3
+            obj = s3.get_object(Bucket=DATA_SOURCE, Key=filename)
+            df = pd.read_csv(StringIO(obj['Body'].read().decode('utf-8')))
+            df = df.where(pd.notnull(df), None)  # Replace NaN with None
+            return df
+        except Exception as e:
+            raise ValueError(f"Error reading file from S3: {str(e)}")
+    else:
+        file_path = os.path.join(DATA_SOURCE, filename)
+        logging.debug(f"Reading file from local path: {file_path}")
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"File '{filename}' not found")
+        try:
+            df = pd.read_csv(file_path)
+            df = df.where(pd.notnull(df), None)  # Replace NaN with None
+            return df
+        except Exception as e:
+            raise ValueError(f"Error reading file: {str(e)}")   
 
-# Path to data
-CSV_FOLDER = os.path.join(os.path.dirname(__file__), 'data')
-
-def read_csv_internal(filename):
-    file_path = os.path.join(CSV_FOLDER, filename)
-
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"File '{filename}' not found")
-
-    try:
-        df = pd.read_csv(file_path)
-        df = df.where(pd.notnull(df), None)  # Replace NaN with None
-        return df
-    except Exception as e:
-        raise ValueError(f"Error reading file: {str(e)}")   
-
-@app.route('/load_data', methods=['POST'])
+@app.route('/data-loader', methods=['POST'])
 def load_preview():
     try:
         data = Data.model_validate(request.json)
-        df = read_csv_internal(data.filename)
+        df = read_data(data.filename)
         # Only return 100 rows to preview data
         result = df.head(100).to_dict(orient='records')
         return jsonify(result)
@@ -76,7 +72,7 @@ def load_preview():
 def run_algorithm():
     try:
         data = Algorithm.model_validate(request.json)
-        df = read_csv_internal(data.filename)
+        df = read_data(data.filename)
 
         model_mapping = {
             'Decision Tree': DecisionTreeClassifier,
@@ -100,9 +96,8 @@ def run_algorithm():
 
         unsupervised_algorithms = ['K-Means', 'DBSCAN', 'Agglomerative Clustering', 'Birch']
         target_column = data.targetColumn if data.algorithm not in unsupervised_algorithms else 'cluster'
-        # df[target_column] = 0  # Initialize the column with 0.  this causes an error 
 
-        # Drop date column if necessary
+        # Drop date column if necessary 
         if 'TransactionDate' in data.trainColumns:
             data.trainColumns.remove('TransactionDate')
         if 'TransactionDate' == target_column:
@@ -181,4 +176,5 @@ def run_algorithm():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
+    logging.getLogger('flask_cors').level = logging.DEBUG
     app.run(debug=True)
