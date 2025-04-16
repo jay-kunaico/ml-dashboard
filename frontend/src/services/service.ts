@@ -1,12 +1,10 @@
 import type { ResultType } from "../types/types";
 
 const BASE_URL = import.meta.env.VITE_API_URL;
-console.log(`BASE_URL: ${BASE_URL}`);
-
 
 export const fetchData = async (url: string) => {
 	try {
-		const response = await fetch(`${BASE_URL}/data-loader`, {
+		const response = await fetch(`${BASE_URL}/run-preview`, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
@@ -15,7 +13,6 @@ export const fetchData = async (url: string) => {
 				filename: url,
 			}),
 		});
-		console.log(`Response: ${response}`);
 
 
 		if (!response.ok) {

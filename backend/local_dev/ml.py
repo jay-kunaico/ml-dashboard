@@ -56,7 +56,7 @@ def read_data(filename):
         except Exception as e:
             raise ValueError(f"Error reading file: {str(e)}")   
 
-@app.route('/data-loader', methods=['POST'])
+@app.route('/run-preview', methods=['POST'])
 def load_preview():
     try:
         data = Data.model_validate(request.json)
