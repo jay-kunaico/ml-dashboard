@@ -20,7 +20,12 @@ from config import ENV,DATA_SOURCE
 from io import StringIO
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True, max_age=600)
+CORS(app, resources={r"/*": {
+         "origins": ["http://localhost:5173", "http://127.0.0.1:5173"],
+         "methods": ["GET", "POST", "OPTIONS"],
+         "allow_headers": ["Content-Type", "Authorization"]
+     }}, 
+     supports_credentials=True, max_age=600)
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -116,7 +121,6 @@ def run_algorithm():
             y_train, y_test = None, None
         else:   
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
-
         if y_train is not None and len(y_train.unique()) < 2:
             return jsonify({"error": "The training data must contain at least two classes."}), 400
         
@@ -174,7 +178,25 @@ def run_algorithm():
     except Exception as e:
         logging.error(f"Error: {e}, {len(df)}")
         return jsonify({"error": str(e)}), 500
+    
+@app.route('/run-preview', methods=['OPTIONS'])
+def handle_options_run_preview():
+    response = make_response()
+    response.headers.add('Access-Control-Allow-Origin', 'http://localhost:5173')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+    return response
+
+@app.route('/run_algorithm', methods=['OPTIONS'])
+def handle_options_run_algorithm():
+    response = make_response()
+    response.headers.add('Access-Control-Allow-Origin', 'http://localhost:5173')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+    return response   
 
 if __name__ == '__main__':
     logging.getLogger('flask_cors').level = logging.DEBUG
     app.run(debug=True)
+
+    
