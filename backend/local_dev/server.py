@@ -10,12 +10,12 @@ from config import ENV, DATA_SOURCE
 from io import StringIO
 import time
 
-from models.traditional import SimpleDecisionTree, SimpleKNN, SimpleRandomForest,SimpleKMeans,SimpleDBSCAN,SimpleAgglomerativeClustering
+from models.traditional import SimpleLogisticRegression,SimpleDecisionTree, SimpleKNN, SimpleRandomForest,SimpleKMeans,SimpleDBSCAN,SimpleAgglomerativeClustering,SimpleXGBoost
 from models.preprocessing import SimpleStandardScaler, SimpleOneHotEncoder, SimpleLabelEncoder
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {
-         "origins": ["http://localhost:5173", "http://127.0.0.1:5173"],
+         "origins": "*",
          "methods": ["GET", "POST", "OPTIONS"],
          "allow_headers": ["Content-Type", "Authorization"]
      }}, 
@@ -84,6 +84,7 @@ def load_preview():
 @app.route('/run_algorithm', methods=['POST'])
 def run_algorithm():
     model_mapping = {
+            'Logistic Regression': lambda: SimpleLogisticRegression(),
             'Decision Tree': lambda: SimpleDecisionTree(max_depth=3, min_samples_split=20),
             'Decision Tree Regressor': lambda: SimpleDecisionTree(max_depth=3, min_samples_split=20),
             'K-Nearest Neighbors': lambda: SimpleKNN(k=5),
@@ -92,7 +93,8 @@ def run_algorithm():
             'Random Forest Regressor': lambda: SimpleRandomForest(n_trees=10, max_depth=5),
             'K-Means': lambda: SimpleKMeans(n_clusters=5),
             'DBSCAN': lambda: SimpleDBSCAN(eps=0.5, min_samples=5),
-            'Agglomerative Clustering': lambda: SimpleAgglomerativeClustering(n_clusters=5)
+            'Agglomerative Clustering': lambda: SimpleAgglomerativeClustering(n_clusters=5),
+            'XGBoost': lambda: SimpleXGBoost(n_estimators=100, learning_rate=0.1, max_depth=3, min_child_weight=1, subsample=1.0, colsample_bytree=1.0, reg_lambda=1.0, reg_alpha=0.0)
         }
     clustering_algorithms = ['K-Means', 'DBSCAN', 'Agglomerative Clustering']
     try:

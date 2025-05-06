@@ -1,5 +1,5 @@
 export const dataSources = [
-	"customers.csv",
+	// "customers.csv",
 	"customer_churn.csv",
 	"credit_score.csv",
 	"credit_risk.csv",
@@ -20,5 +20,5 @@ export const algorithms = {
 		"K-Nearest Neighbors Regressor",
 		"Random Forest Regressor",
 	],
-	clustering: ["K-Means", "DBSCAN", "Agglomerative Clustering", "Birch"],
+	clustering: ["K-Means", "DBSCAN", "Agglomerative Clustering",],
 };

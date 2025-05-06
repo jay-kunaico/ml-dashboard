@@ -275,41 +275,290 @@ class SimpleAgglomerativeClustering:
     def __init__(self, n_clusters=5):
         self.n_clusters = n_clusters
         self.labels_ = None
-        
+
     def fit_predict(self, X):
         n_samples = X.shape[0]
-        # Initialize each point as its own cluster
-        labels = np.arange(n_samples)
+        clusters = [[i] for i in range(n_samples)]
         distances = np.sqrt(((X[:, np.newaxis, :] - X) ** 2).sum(axis=2))
-        
-        current_n_clusters = n_samples
-        while current_n_clusters > self.n_clusters:
-            # Find closest pair of clusters
-            mask = np.where(~np.eye(len(distances), dtype=bool))
-            i, j = np.unravel_index(np.argmin(distances[mask]), (len(distances), len(distances)))
-            if i > j:
-                i, j = j, i
-                
-            # Merge clusters
-            labels[labels == labels[j]] = labels[i]
-            labels[labels > labels[j]] -= 1
-            
-            # Update distances (using single linkage)
-            new_distances = np.minimum(distances[i], distances[j])
-            distances = np.delete(np.delete(distances, j, axis=0), j, axis=1)
-            distances[i] = new_distances
-            distances[:, i] = new_distances
-            
-            current_n_clusters -= 1
-            
-        # Relabel clusters from 0 to n_clusters-1
-        unique_labels = np.unique(labels)
-        self.labels_ = np.zeros_like(labels)
-        for i, label in enumerate(unique_labels):
-            self.labels_[labels == label] = i
-            
-        return self.labels_
-    
+        np.fill_diagonal(distances, np.inf)
+
+        while len(clusters) > self.n_clusters:
+            min_dist = np.inf
+            to_merge = (None, None)
+            for i in range(len(clusters)):
+                for j in range(i + 1, len(clusters)):
+                    dists = [distances[p1, p2] for p1 in clusters[i] for p2 in clusters[j]]
+                    dist = min(dists)
+                    if dist < min_dist:
+                        min_dist = dist
+                        to_merge = (i, j)
+            i, j = to_merge
+            clusters[i].extend(clusters[j])
+            del clusters[j]
+
+        labels = np.empty(n_samples, dtype=int)
+        for idx, cluster in enumerate(clusters):
+            for sample_idx in cluster:
+                labels[sample_idx] = idx
+        self.labels_ = labels
+        return labels
+
     def fit(self, X):
         self.fit_predict(X)
         return self
+
+    def predict(self, X):
+        # For this simple implementation, just return the labels from the last fit
+        return self.labels_
+
+class SimpleLogisticRegression:
+    def __init__(self, learning_rate=0.01, max_iter=1000, tol=1e-4):
+        self.learning_rate = learning_rate
+        self.max_iter = max_iter
+        self.tol = tol
+        self.weights = None
+        self.bias = None
+        self.classes_ = None
+        
+    def _sigmoid(self, z):
+        return 1 / (1 + np.exp(-np.clip(z, -500, 500)))  # Clip to prevent overflow
+        
+    def _softmax(self, z):
+        exp_z = np.exp(z - np.max(z, axis=1, keepdims=True))  # Subtract max for numerical stability
+        return exp_z / np.sum(exp_z, axis=1, keepdims=True)
+    
+    def fit(self, X, y):
+        n_samples, n_features = X.shape
+        self.classes_ = np.unique(y)
+        n_classes = len(self.classes_)
+        
+        # Initialize weights and bias
+        if n_classes == 2:
+            self.weights = np.zeros(n_features)
+            self.bias = 0
+        else:
+            self.weights = np.zeros((n_classes, n_features))
+            self.bias = np.zeros(n_classes)
+        
+        # Convert y to one-hot encoding for multi-class
+        if n_classes > 2:
+            y_one_hot = np.zeros((n_samples, n_classes))
+            for i, cls in enumerate(self.classes_):
+                y_one_hot[y == cls, i] = 1
+            y = y_one_hot
+        
+        # Gradient descent
+        for _ in range(self.max_iter):
+            # Forward pass
+            if n_classes == 2:
+                z = np.dot(X, self.weights) + self.bias
+                predictions = self._sigmoid(z)
+                # Binary cross-entropy loss
+                loss = -np.mean(y * np.log(predictions + 1e-15) + 
+                              (1 - y) * np.log(1 - predictions + 1e-15))
+            else:
+                z = np.dot(X, self.weights.T) + self.bias
+                predictions = self._softmax(z)
+                # Categorical cross-entropy loss
+                loss = -np.mean(np.sum(y * np.log(predictions + 1e-15), axis=1))
+            
+            # Backward pass
+            if n_classes == 2:
+                dw = np.dot(X.T, (predictions - y)) / n_samples
+                db = np.mean(predictions - y)
+                self.weights -= self.learning_rate * dw
+                self.bias -= self.learning_rate * db
+            else:
+                dw = np.dot((predictions - y).T, X) / n_samples
+                db = np.mean(predictions - y, axis=0)
+                self.weights -= self.learning_rate * dw
+                self.bias -= self.learning_rate * db
+            
+            # Check convergence
+            if loss < self.tol:
+                break
+                
+        return self
+    
+    def predict_proba(self, X):
+        if len(self.classes_) == 2:
+            z = np.dot(X, self.weights) + self.bias
+            proba = self._sigmoid(z)
+            return np.column_stack((1 - proba, proba))
+        else:
+            z = np.dot(X, self.weights.T) + self.bias
+            return self._softmax(z)
+    
+    def predict(self, X):
+        proba = self.predict_proba(X)
+        if len(self.classes_) == 2:
+            return (proba[:, 1] >= 0.5).astype(int)
+        return self.classes_[np.argmax(proba, axis=1)]
+
+class SimpleXGBoost:
+    class TreeNode:
+        def __init__(self):
+            self.feature = None
+            self.threshold = None
+            self.left = None
+            self.right = None
+            self.value = None
+            self.weight = None
+            
+    def __init__(self, n_estimators=100, learning_rate=0.1, max_depth=3, 
+                 min_child_weight=1, subsample=1.0, colsample_bytree=1.0,
+                 reg_lambda=1.0, reg_alpha=0.0):
+        self.n_estimators = n_estimators
+        self.learning_rate = learning_rate
+        self.max_depth = max_depth
+        self.min_child_weight = min_child_weight
+        self.subsample = subsample
+        self.colsample_bytree = colsample_bytree
+        self.reg_lambda = reg_lambda  # L2 regularization
+        self.reg_alpha = reg_alpha    # L1 regularization
+        self.trees = []
+        self.base_score = None
+        
+    def _sigmoid(self, x):
+        return 1 / (1 + np.exp(-np.clip(x, -500, 500)))
+        
+    def _compute_gradients(self, y_true, y_pred, task='binary'):
+        if task == 'binary':
+            p = self._sigmoid(y_pred)
+            grad = p - y_true
+            hess = p * (1 - p)
+        else:  # regression
+            grad = y_pred - y_true
+            hess = np.ones_like(y_true)
+        return grad, hess
+        
+    def _best_split(self, X, grad, hess, feature_indices):
+        best_gain = -float('inf')
+        best_feature = None
+        best_threshold = None
+        
+        n_samples = X.shape[0]
+        total_grad = np.sum(grad)
+        total_hess = np.sum(hess)
+        
+        for feature in feature_indices:
+            # Get unique values for this feature
+            thresholds = np.unique(X[:, feature])
+            if len(thresholds) > 10:
+                thresholds = np.percentile(thresholds, np.linspace(10, 90, 10))
+                
+            for threshold in thresholds:
+                left_mask = X[:, feature] <= threshold
+                right_mask = ~left_mask
+                
+                if np.sum(left_mask) < self.min_child_weight or np.sum(right_mask) < self.min_child_weight:
+                    continue
+                    
+                left_grad = np.sum(grad[left_mask])
+                left_hess = np.sum(hess[left_mask])
+                right_grad = np.sum(grad[right_mask])
+                right_hess = np.sum(hess[right_mask])
+                
+                # Calculate gain
+                left_score = (left_grad ** 2) / (left_hess + self.reg_lambda)
+                right_score = (right_grad ** 2) / (right_hess + self.reg_lambda)
+                total_score = (total_grad ** 2) / (total_hess + self.reg_lambda)
+                
+                gain = left_score + right_score - total_score
+                
+                if gain > best_gain:
+                    best_gain = gain
+                    best_feature = feature
+                    best_threshold = threshold
+                    
+        return best_feature, best_threshold
+        
+    def _build_tree(self, X, grad, hess, depth=0):
+        node = self.TreeNode()
+        
+        if depth >= self.max_depth or X.shape[0] < self.min_child_weight:
+            node.value = -np.sum(grad) / (np.sum(hess) + self.reg_lambda)
+            return node
+            
+        # Select features for this tree
+        n_features = X.shape[1]
+        n_features_to_use = max(1, int(n_features * self.colsample_bytree))
+        feature_indices = np.random.choice(n_features, n_features_to_use, replace=False)
+        
+        feature, threshold = self._best_split(X, grad, hess, feature_indices)
+        
+        if feature is None:
+            node.value = -np.sum(grad) / (np.sum(hess) + self.reg_lambda)
+            return node
+            
+        node.feature = feature
+        node.threshold = threshold
+        
+        left_mask = X[:, feature] <= threshold
+        right_mask = ~left_mask
+        
+        node.left = self._build_tree(X[left_mask], grad[left_mask], hess[left_mask], depth + 1)
+        node.right = self._build_tree(X[right_mask], grad[right_mask], hess[right_mask], depth + 1)
+        
+        return node
+        
+    def _predict_tree(self, x, tree):
+        if tree.value is not None:
+            return tree.value
+            
+        if x[tree.feature] <= tree.threshold:
+            return self._predict_tree(x, tree.left)
+        return self._predict_tree(x, tree.right)
+        
+    def fit(self, X, y, task='binary'):
+        n_samples = X.shape[0]
+        self.base_score = np.mean(y) if task == 'regression' else 0
+        y_pred = np.full(n_samples, self.base_score)
+        
+        for _ in range(self.n_estimators):
+            # Compute gradients
+            grad, hess = self._compute_gradients(y, y_pred, task)
+            
+            # Subsample data
+            if self.subsample < 1.0:
+                indices = np.random.choice(n_samples, int(n_samples * self.subsample), replace=False)
+                X_sub = X[indices]
+                grad_sub = grad[indices]
+                hess_sub = hess[indices]
+            else:
+                X_sub = X
+                grad_sub = grad
+                hess_sub = hess
+                
+            # Build tree
+            tree = self._build_tree(X_sub, grad_sub, hess_sub)
+            self.trees.append(tree)
+            
+            # Update predictions
+            for i in range(n_samples):
+                y_pred[i] += self.learning_rate * self._predict_tree(X[i], tree)
+                
+        return self
+        
+    def predict(self, X, task='binary'):
+        n_samples = X.shape[0]
+        y_pred = np.full(n_samples, self.base_score)
+        
+        for tree in self.trees:
+            for i in range(n_samples):
+                y_pred[i] += self.learning_rate * self._predict_tree(X[i], tree)
+                
+        if task == 'binary':
+            return (self._sigmoid(y_pred) >= 0.5).astype(int)
+        return y_pred
+        
+    def predict_proba(self, X):
+        n_samples = X.shape[0]
+        y_pred = np.full(n_samples, self.base_score)
+        
+        for tree in self.trees:
+            for i in range(n_samples):
+                y_pred[i] += self.learning_rate * self._predict_tree(X[i], tree)
+                
+        proba = self._sigmoid(y_pred)
+        return np.column_stack((1 - proba, proba))
