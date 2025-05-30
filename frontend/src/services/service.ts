@@ -71,10 +71,11 @@ export const runAlgorithm = async (
 				else if (errorMessage.includes('base_score must be in (0,1)')) {
 					errorMessage = 'The base score must be in (0,1) for logistic loss.';
 				}
-				// else if (errorMessage.includes(':')) {
-				// 	const parts = errorMessage.split(':');
-				// 	errorMessage = parts[1].trim();
-				// }
+				// Comment out below to see full error message
+				else if (errorMessage.includes(':')) {
+					const parts = errorMessage.split(':');
+					errorMessage = parts[1].trim();
+				}
 			} catch {
 				errorMessage = await response.text();
 			}
