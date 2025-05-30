@@ -68,13 +68,13 @@ export const runAlgorithm = async (
 				if (!errorMessage || errorMessage === "''") {
 					errorMessage = "An unknown error occurred. Please check the backend logs.";
 				}
-				if (errorMessage.includes('base_score must be in (0,1)')) {
+				else if (errorMessage.includes('base_score must be in (0,1)')) {
 					errorMessage = 'The base score must be in (0,1) for logistic loss.';
 				}
-				else if (errorMessage.includes(':')) {
-					const parts = errorMessage.split(':');
-					errorMessage = parts[1].trim();
-				}
+				// else if (errorMessage.includes(':')) {
+				// 	const parts = errorMessage.split(':');
+				// 	errorMessage = parts[1].trim();
+				// }
 			} catch {
 				errorMessage = await response.text();
 			}
