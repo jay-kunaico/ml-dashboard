@@ -18,15 +18,15 @@ export const fetchData = async (url: string) => {
 		if (!response.ok) {
 			throw new Error('Network response was not ok');
 		}
-		const result = await response.json();
+		const data = await response.json();
 
 		// Handle Lambda API Gateway response (stringified body)
-		if (result.body && typeof result.body === 'string') {
-			return JSON.parse(result.body);
+		if (data.body && typeof data.body === 'string') {
+			return JSON.parse(data.body);
 		}
 
 		// Handle Flask API response (direct JSON)
-		return result;
+		return data;
 	} catch (error) {
 		console.error('Error:', error);
 		throw error;
@@ -54,14 +54,31 @@ export const runAlgorithm = async (
 			}),
 		});
 		if (!response.ok) {
-			let errorMessage = await response.text();
-			if (errorMessage.includes('base_score must be in (0,1)')) {
-				errorMessage = 'The base score must be in (0,1) for logistic loss.';
+			let errorMessage = '';
+			try {
+				const errorData = await response.json();
+				// Lambda: error is in stringified JSON in body
+				if (errorData.body && typeof errorData.body === 'string') {
+					const parsedBody = JSON.parse(errorData.body);
+					errorMessage = parsedBody.error || JSON.stringify(parsedBody);
+				} else {
+					// Flask: error is direct JSON
+					errorMessage = errorData.error || JSON.stringify(errorData);
+				}
+				if (!errorMessage || errorMessage === "''") {
+					errorMessage = "An unknown error occurred. Please check the backend logs.";
+				}
+				if (errorMessage.includes('base_score must be in (0,1)')) {
+					errorMessage = 'The base score must be in (0,1) for logistic loss.';
+				}
+				else if (errorMessage.includes(':')) {
+					const parts = errorMessage.split(':');
+					errorMessage = parts[1].trim();
+				}
+			} catch {
+				errorMessage = await response.text();
 			}
-			else if (errorMessage.includes(':')) {
-				const parts = errorMessage.split(':');
-				errorMessage = parts[1].trim();
-			}
+
 			errorMessage = errorMessage.replace(/["'{}[\]()]/g, '');
 			const truncatedErrorMessage = errorMessage.length > 100 ? `${errorMessage.substring(0, 200)}...` : errorMessage;
 			throw new Error(truncatedErrorMessage);

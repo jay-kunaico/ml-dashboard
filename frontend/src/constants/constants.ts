@@ -22,3 +22,5 @@ export const algorithms = {
 	],
 	clustering: ["K-Means", "DBSCAN", "Agglomerative Clustering",],
 };
+
+export const DOCS_URL = "https://docs.google.com/document/d/1nAcNANwVH_nIRnHIKsBswwe2V9ozaD-mKQFrSShrj7Q/edit?usp=sharing";

@@ -10,4 +10,5 @@ export interface ResultType {
 		message: string;
 	};
 	predictions?: string[];
+	error?: string;
 }

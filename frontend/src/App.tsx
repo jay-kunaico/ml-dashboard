@@ -13,6 +13,7 @@ import type { ResultType } from "./types/types";
 import HeadlessModal from "./components/headless_modal";
 import Accordion from "./components/accordian";
 import { terminology } from "./constants/terminology";
+import { DOCS_URL } from "./constants/constants";
 
 const DataTable = React.memo(
 	({
@@ -163,6 +164,13 @@ function App() {
 				selectedAlgorithm,
 				selectedDataSource,
 			);
+
+			// Check for error in the response
+			if ("error" in response && response.error) {
+				setError(response.error);
+				setLoadingResults(false);
+				return;
+			}
 			setResponse(response);
 
 			if (response.dataframe) {
@@ -201,6 +209,29 @@ function App() {
 				>
 					Machine Learning Playground
 				</button>
+				<a
+					href={DOCS_URL}
+					target="_blank"
+					rel="noopener noreferrer"
+					className="ml-2 text-blue-600 hover:text-blue-800"
+					title="Open help documentation"
+				>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						className="h-6 w-6 inline-block"
+						fill="none"
+						viewBox="0 0 24 24"
+						stroke="currentColor"
+					>
+						<title>Help icon</title>
+						<path
+							strokeLinecap="round"
+							strokeLinejoin="round"
+							strokeWidth={2}
+							d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+						/>
+					</svg>
+				</a>
 			</h1>
 			<HeadlessModal
 				isOpen={isModalOpen}

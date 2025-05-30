@@ -9,5 +9,7 @@ export const modelMetadata = {
 	"K-Nearest Neighbors Regressor": "Predicts continuous values by averaging the nearest neighbors output",
 	"Random Forest Regressor": "Uses multiple decision trees to make stable continuous predictions",
 	"K-Means": "Clusters data into groups based on similarity. Ideal for unsupervised learning",
+	"DBSCAN": "Clusters data based on density, identifying core samples and noise",
+	"Agglomerative Clustering": "Hierarchically merges data points into clusters based on similarity, starting from individual points",
 
 };
