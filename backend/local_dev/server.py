@@ -99,15 +99,20 @@ def run_algorithm():
     clustering_algorithms = ['K-Means', 'DBSCAN', 'Agglomerative Clustering']
     try:
         start_time = time.time()
-        logging.info("Starting algorithm request")
         data = Algorithm.model_validate(request.json)
-        logging.info(f"Request validated: {data.algorithm}")
         
         df = read_data(data.filename)
-        logging.info(f"Data loaded: {df.shape}, Time elapsed: {time.time() - start_time:.2f}s")
 		
         if data.algorithm not in model_mapping:
             return jsonify({"error": "Invalid algorithm"}), 400
+        
+        if data.algorithm not in clustering_algorithms:
+        # Supervised: targetColumn must be provided and not empty
+            if not data.targetColumn or data.targetColumn.strip() == "":
+                return jsonify({"error": "A target column must be selected for supervised algorithms."}), 400
+            else:
+                # Unsupervised: ignore targetColumn or set to None
+                data.targetColumn = None
 
         # Prepare data
         if data.algorithm in clustering_algorithms:
@@ -146,18 +151,11 @@ def run_algorithm():
         # Combine processed features
         X_processed = np.hstack([X_num, X_cat])
 
-        # Before model training
-        if 'Decision Tree' in data.algorithm:
-            logging.info("Starting Decision Tree training - this might take a while")
-            logging.info(f"Data shape after preprocessing: {X_processed.shape}")
-        
         model = model_mapping[data.algorithm]()
         
         if data.algorithm in clustering_algorithms:
-            logging.debug("Starting clustering")
             model.fit(X_processed)
             predictions = model.predict(X_processed)
-            logging.debug("Clustering completed")
             
             # Calculate clustering-specific metrics
             n_clusters = len(np.unique(predictions[predictions != -1]))  # Don't count noise points (-1)
@@ -176,7 +174,6 @@ def run_algorithm():
         else:
             # Handle supervised learning
             preprocessing_time = time.time() - start_time
-            logging.info(f"Preprocessing completed in {preprocessing_time:.2f} seconds")
             
             if 'Regressor' not in data.algorithm:
                 label_encoder = SimpleLabelEncoder()
@@ -193,13 +190,11 @@ def run_algorithm():
             training_start = time.time()
             model.fit(X_train, y_train)
             training_time = time.time() - training_start
-            logging.info(f"Model training completed in {training_time:.2f} seconds")
             
             # Make predictions with timing
             prediction_start = time.time()
             predictions = model.predict(X_test)
             prediction_time = time.time() - prediction_start
-            logging.info(f"Predictions completed in {prediction_time:.2f} seconds")
 
             # Calculate metrics
             if 'Regressor' in data.algorithm:
@@ -229,7 +224,6 @@ def run_algorithm():
             target_column = data.targetColumn
 
         total_time = time.time() - start_time
-        logging.info(f"Total processing time: {total_time:.2f} seconds")
 
         # Add timing information to results
         results['processing_time'] = float(total_time)
@@ -243,16 +237,12 @@ def run_algorithm():
         })
 
     except ValidationError as ve:
-        logging.error(f"ValidationError: {ve}")
         return jsonify({"error": str(ve)}), 400
     except FileNotFoundError as e:
-        logging.error(f"FileNotFoundError: {e}")
         return jsonify({"error": str(e)}), 404
     except ValueError as ve:
-        logging.error(f"ValueError: {ve}")
         return jsonify({"error": str(ve)}), 400
     except Exception as e:
-        logging.error(f"Error: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/run-preview', methods=['OPTIONS'])
