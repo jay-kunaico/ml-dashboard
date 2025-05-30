@@ -1,27 +1,36 @@
 import json
 import boto3
 import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
-from sklearn.linear_model import LogisticRegression
-from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
-from sklearn.neighbors import KNeighborsRegressor, KNeighborsClassifier
-from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
-from sklearn.cluster import KMeans, AgglomerativeClustering, DBSCAN, Birch
-from xgboost import XGBClassifier
-from sklearn.metrics import mean_squared_error, r2_score, accuracy_score, f1_score
+import numpy as np
 from io import StringIO
 import os
+import sys
 import logging
+
+# Add the path to our custom models
+sys.path.append('/opt/python')
+from models.traditional import (
+    SimpleDecisionTree,
+    SimpleKNN,
+    SimpleRandomForest,
+    SimpleLogisticRegression,
+    SimpleKMeans,
+    SimpleDBSCAN,
+    SimpleAgglomerativeClustering,
+    SimpleXGBoost
+)
+from models.preprocessing import (
+    SimpleStandardScaler,
+    SimpleOneHotEncoder,
+    SimpleLabelEncoder
+)
 
 # Environment variables
 READ_LAMBDA_ENDPOINT = os.getenv('READ_LAMBDA_ENDPOINT', 'data_loader')
 lambda_client = boto3.client('lambda')
 
-# Initialize logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
 
 def handler(event, context):
     try:
@@ -32,8 +41,26 @@ def handler(event, context):
         train_columns = body.get('trainColumns')
         target_column = body.get('targetColumn')
 
-        if not filename or not algorithm or not train_columns or not target_column:
-            return _response(400, "Missing required fields: 'filename', 'algorithm', 'trainColumns', or 'targetColumn'.")
+         # Drop date column if necessary
+        if 'TransactionDate' in train_columns:
+            train_columns.remove('TransactionDate')
+        if 'TransactionDate' == target_column:
+            return _response(400, "TransactionDate cannot be the target column.")
+
+         # Handle unsupervised algorithms
+        unsupervised_algorithms = ['K-Means', 'DBSCAN', 'Agglomerative']
+        target_column = target_column if algorithm not in unsupervised_algorithms else 'cluster'
+
+        if not filename:
+            return _response(400, "Missing required field: 'filename'.")
+        if not algorithm:
+            return _response(400, "Missing required field: 'algorithm'.")
+        if not train_columns:
+            return _response(400, "Missing required field: 'trainColumns'.")
+
+        if algorithm not in unsupervised_algorithms:
+            if target_column is None or target_column == '':
+                return _response(400, "A target column must be selected for supervised algorithms.")
 
         # Invoke the data_loader Lambda function to fetch the CSV data
         invoke_response = lambda_client.invoke(
@@ -58,18 +85,17 @@ def handler(event, context):
 
         # Define model mapping
         model_mapping = {
-            'Decision Tree': DecisionTreeClassifier,
-            'Decision Tree Regressor': lambda: DecisionTreeRegressor(max_depth=5),
-            'K-Nearest Neighbors': lambda: KNeighborsClassifier(n_neighbors=5),
-            'K-Nearest Neighbors Regressor': lambda: KNeighborsRegressor(n_neighbors=5),
-            'Random Forest': RandomForestClassifier,
-            'Random Forest Regressor': RandomForestRegressor,
-            'Logistic Regression': lambda: LogisticRegression(max_iter=1000),
-            'XGBoost': lambda: XGBClassifier(use_label_encoder=False, eval_metric='logloss'),
-            'K-Means': lambda: KMeans(n_clusters=5, random_state=42),
-            'Agglomerative Clustering': lambda: AgglomerativeClustering(n_clusters=5),
-            'DBSCAN': lambda: DBSCAN(eps=0.5, min_samples=5),
-            'Birch': lambda: Birch(n_clusters=5)
+            'Decision Tree': lambda: SimpleDecisionTree(max_depth=5),
+            'Decision Tree Regressor': lambda: SimpleDecisionTree(max_depth=5),
+            'K-Nearest Neighbors': lambda: SimpleKNN(k=5),
+            'K-Nearest Neighbors Regressor': lambda: SimpleKNN(k=5),
+            'Random Forest': lambda: SimpleRandomForest(n_trees=10, max_depth=5),
+            'Random Forest Regressor': lambda: SimpleRandomForest(n_trees=10, max_depth=5),
+            'Logistic Regression': lambda: SimpleLogisticRegression(learning_rate=0.01, max_iter=1000),
+            'K-Means': lambda: SimpleKMeans(n_clusters=5),
+            'DBSCAN': lambda: SimpleDBSCAN(eps=0.5, min_samples=5),
+            'Agglomerative Clustering': lambda: SimpleAgglomerativeClustering(n_clusters=5),
+            'XGBoost': lambda: SimpleXGBoost(n_estimators=100, learning_rate=0.1, max_depth=3)
         }
 
         if algorithm not in model_mapping:
@@ -77,71 +103,97 @@ def handler(event, context):
 
         model = model_mapping[algorithm]()
 
-        # Handle unsupervised algorithms
-        unsupervised_algorithms = ['K-Means', 'DBSCAN', 'Agglomerative Clustering', 'Birch']
-        target_column = target_column if algorithm not in unsupervised_algorithms else 'cluster'
-
-        # Drop date column if necessary
-        if 'TransactionDate' in train_columns:
-            train_columns.remove('TransactionDate')
-        if 'TransactionDate' == target_column:
-            return _response(400, "TransactionDate cannot be the target column.")
-
         # Splitting the data
         X = df[train_columns].drop(columns=[target_column], errors='ignore')
         y = df[target_column] if target_column in df.columns else None
-
-        if algorithm in unsupervised_algorithms:
-            y_train, y_test = None, None
-        else:
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
-
-        if y_train is not None and len(y_train.unique()) < 2:
-            return _response(400, "The training data must contain at least two classes.")
 
         # Preprocessing
         categorical_cols = X.select_dtypes(include=['object']).columns.tolist()
         numerical_cols = X.select_dtypes(include=['number']).columns.tolist()
 
-        preprocessor = ColumnTransformer(
-            transformers=[
-                ('num', StandardScaler(), numerical_cols),
-                ('cat', OneHotEncoder(handle_unknown='ignore', sparse_output=False), categorical_cols)
-            ])
+        # Initialize preprocessors
+        scaler = SimpleStandardScaler()
+        encoder = SimpleOneHotEncoder()
+        label_encoder = SimpleLabelEncoder()
 
-        # Create a pipeline
-        pipeline = Pipeline([
-            ('preprocessor', preprocessor),
-            ('model', model)
-        ])
+        # Preprocess numerical features
+        if numerical_cols:
+            X_num = scaler.fit_transform(X[numerical_cols].values)
+        else:
+            X_num = np.array([])
+
+        # Preprocess categorical features
+        if categorical_cols:
+            X_cat = encoder.fit_transform(X[categorical_cols])
+        else:
+            X_cat = np.array([])
+
+        # Combine preprocessed features
+        if len(X_num) > 0 and len(X_cat) > 0:
+            X_processed = np.hstack([X_num, X_cat])
+        elif len(X_num) > 0:
+            X_processed = X_num
+        else:
+            X_processed = X_cat
+
+        # Convert target to numerical if needed
+        if y is not None and algorithm not in unsupervised_algorithms:
+            y = label_encoder.fit_transform(y)
+
+        # Split data for supervised learning
+        if algorithm not in unsupervised_algorithms:
+            # Simple train-test split (80-20)
+            n_samples = len(X_processed)
+            indices = np.random.permutation(n_samples)
+            split_idx = int(0.8 * n_samples)
+            train_idx, test_idx = indices[:split_idx], indices[split_idx:]
+            
+            X_train, X_test = X_processed[train_idx], X_processed[test_idx]
+            y_train, y_test = y[train_idx], y[test_idx]
+        else:
+            X_train, X_test = X_processed, None
+            y_train, y_test = None, None
 
         # Fit the model
         if algorithm in unsupervised_algorithms:
-            pipeline.fit(X)
-            predictions = pipeline.predict(X) if hasattr(model, 'predict') else pipeline.fit_predict(X)
+            model.fit(X_train)
+
+            if algorithm == 'Agglomerative':
+                predictions = model.labels_
+            else:
+                predictions = model.predict(X_train)
+
             df[target_column] = predictions
             results = {"message": f"{algorithm} Clustering completed"}
         else:
-            pipeline.fit(X_train, y_train)
-            predictions = pipeline.predict(X_test)
-            df.loc[X_test.index, target_column] = predictions
-
-            # Metrics
+            model.fit(X_train, y_train)
+            predictions = model.predict(X_test)
+            
+            # Calculate metrics
             if 'Regressor' in algorithm:
-                mse = mean_squared_error(y_test, predictions)
-                r2 = r2_score(y_test, predictions)
+                mse = np.mean((y_test - predictions) ** 2)
+                r2 = 1 - mse / np.var(y_test)
                 results = {'mse': mse, 'r2': r2}
             else:
-                accuracy = accuracy_score(y_test, predictions)
-                f1 = f1_score(y_test, predictions, average='weighted')
+                accuracy = np.mean(y_test == predictions)
+                # Simple F1 calculation
+                tp = np.sum((y_test == 1) & (predictions == 1))
+                fp = np.sum((y_test == 0) & (predictions == 1))
+                fn = np.sum((y_test == 1) & (predictions == 0))
+                precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+                recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+                f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
                 results = {'accuracy': accuracy, 'f1_score': f1}
+
+            # Update predictions in dataframe
+            df.loc[test_idx, target_column] = predictions
 
         # Return the results
         return _response(200, {
+            'dataframe': df.head(1000).to_dict(orient='records'),
             'model': model.__class__.__name__,
             'results': results,
             'predictions': df[target_column].tolist(),
-            'dataframe': df.head(1000).to_dict(orient='records'),
             'size': len(df),
         })
 
@@ -151,11 +203,13 @@ def handler(event, context):
 
 
 def _response(status_code, body):
-    return {
+     return {
         "statusCode": status_code,
-        "headers": {
+         "headers": {
             "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",  # for CORS
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
+            "Access-Control-Allow-Methods": "POST,OPTIONS"
         },
-        "body": json.dumps(body) if not isinstance(body, str) else body
+        "body": json.dumps({"error": body}) if status_code != 200 else json.dumps(body)
     }
