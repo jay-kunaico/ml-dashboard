@@ -109,7 +109,7 @@ def run_algorithm():
         if data.algorithm not in clustering_algorithms:
         # Supervised: targetColumn must be provided and not empty
             if not data.targetColumn or data.targetColumn.strip() == "":
-                return jsonify({"error": "A target column must be selected for supervised algorithms."}), 400
+                return jsonify({"error": "A target column must be selected for supervised models."}), 400
             else:
                 # Unsupervised: ignore targetColumn or set to None
                 data.targetColumn = None
