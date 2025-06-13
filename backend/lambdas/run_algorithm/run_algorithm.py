@@ -48,7 +48,7 @@ def handler(event, context):
             return _response(400, "TransactionDate cannot be the target column.")
 
          # Handle unsupervised algorithms
-        unsupervised_algorithms = ['K-Means', 'DBSCAN', 'Agglomerative']
+        unsupervised_algorithms = ['K-Means', 'DBSCAN', 'Agglomerative Clustering']
         target_column = target_column if algorithm not in unsupervised_algorithms else 'cluster'
 
         if not filename:
@@ -61,6 +61,9 @@ def handler(event, context):
         if algorithm not in unsupervised_algorithms:
             if target_column is None or target_column == '':
                 return _response(400, "A target column must be selected for supervised algorithms.")
+            # fix for target column validation
+            if target_column not in df.columns:
+                return _response(400, f"Target column '{target_column}' not found in the dataset.")
 
         # Invoke the data_loader Lambda function to fetch the CSV data
         invoke_response = lambda_client.invoke(

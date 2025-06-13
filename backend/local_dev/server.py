@@ -110,6 +110,9 @@ def run_algorithm():
         # Supervised: targetColumn must be provided and not empty
             if not data.targetColumn or data.targetColumn.strip() == "":
                 return jsonify({"error": "A target column must be selected for supervised models."}), 400
+            # fix for target column validation
+            if data.targetColumn not in df.columns:
+                return jsonify({"error": f"Target column '{data.targetColumn}' not found in dataset."}), 400
         else:
             # Unsupervised: ignore targetColumn or set to None
             data.targetColumn = None
