@@ -204,7 +204,7 @@ function App() {
 					aria-controls="ml-terminology-modal"
 					tabIndex={0}
 					onKeyDown={(e) => {
-						if (e.key === "Enter" || e.key === " ") openModal(); // Handle keyboard interaction
+						if (e.key === "Enter" || e.key === " ") openModal();
 					}}
 				>
 					Machine Learning Playground
@@ -245,7 +245,8 @@ function App() {
 				</p>
 				<p className="mt-4">
 					Use the interface to select a dataset, choose features and a target
-					variable, and run a machine learning model to see the results.
+					variable, if applicable, and run a machine learning model to see the
+					results.
 				</p>
 				<Accordion items={terminology} />
 			</HeadlessModal>
