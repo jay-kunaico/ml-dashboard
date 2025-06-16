@@ -278,22 +278,23 @@ class SimpleAgglomerativeClustering:
 
     def fit_predict(self, X):
         n_samples = X.shape[0]
-        clusters = [[i] for i in range(n_samples)]
+        clusters = [{i} for i in range(n_samples)]
         distances = np.sqrt(((X[:, np.newaxis, :] - X) ** 2).sum(axis=2))
         np.fill_diagonal(distances, np.inf)
 
         while len(clusters) > self.n_clusters:
+            # Find the closest pair of clusters
             min_dist = np.inf
-            to_merge = (None, None)
+            merge_pair = None
             for i in range(len(clusters)):
                 for j in range(i + 1, len(clusters)):
-                    dists = [distances[p1, p2] for p1 in clusters[i] for p2 in clusters[j]]
-                    dist = min(dists)
+                    # Single linkage: minimum distance between points in clusters
+                    dist = np.min([distances[p1, p2] for p1 in clusters[i] for p2 in clusters[j]])
                     if dist < min_dist:
                         min_dist = dist
-                        to_merge = (i, j)
-            i, j = to_merge
-            clusters[i].extend(clusters[j])
+                        merge_pair = (i, j)
+            i, j = merge_pair
+            clusters[i].update(clusters[j])
             del clusters[j]
 
         labels = np.empty(n_samples, dtype=int)
@@ -308,7 +309,6 @@ class SimpleAgglomerativeClustering:
         return self
 
     def predict(self, X):
-        # For this simple implementation, just return the labels from the last fit
         return self.labels_
 
 class SimpleLogisticRegression:
