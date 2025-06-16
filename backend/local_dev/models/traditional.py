@@ -1,6 +1,7 @@
 import numpy as np
 import logging
 import time
+import heapq
 
 class SimpleDecisionTree:
     class Node:
@@ -278,29 +279,48 @@ class SimpleAgglomerativeClustering:
 
     def fit_predict(self, X):
         n_samples = X.shape[0]
+        # Start with each point as its own cluster
         clusters = [{i} for i in range(n_samples)]
+        # Precompute all pairwise distances
         distances = np.sqrt(((X[:, np.newaxis, :] - X) ** 2).sum(axis=2))
         np.fill_diagonal(distances, np.inf)
 
-        while len(clusters) > self.n_clusters:
-            # Find the closest pair of clusters
-            min_dist = np.inf
-            merge_pair = None
-            for i in range(len(clusters)):
-                for j in range(i + 1, len(clusters)):
-                    # Single linkage: minimum distance between points in clusters
-                    dist = np.min([distances[p1, p2] for p1 in clusters[i] for p2 in clusters[j]])
-                    if dist < min_dist:
-                        min_dist = dist
-                        merge_pair = (i, j)
-            i, j = merge_pair
-            clusters[i].update(clusters[j])
-            del clusters[j]
+        # Initialize heap with all pairs (i, j) and their distances
+        heap = []
+        for i in range(n_samples):
+            for j in range(i + 1, n_samples):
+                heapq.heappush(heap, (distances[i, j], i, j))
 
+        # Track which clusters are still active
+        active = [True] * n_samples
+        cluster_map = {i: i for i in range(n_samples)}  # maps sample idx to cluster idx
+
+        while len([c for c in clusters if c is not None]) > self.n_clusters:
+            # Get the closest pair of clusters
+            while True:
+                min_dist, i, j = heapq.heappop(heap)
+                if clusters[i] is not None and clusters[j] is not None:
+                    break
+
+            # Merge clusters j into i
+            clusters[i].update(clusters[j])
+            clusters[j] = None
+
+            # Update distances in the heap for the new cluster
+            for k, cluster in enumerate(clusters):
+                if cluster is not None and k != i:
+                    # Single linkage: min distance between any points in clusters
+                    new_dist = np.min([distances[p1, p2] for p1 in clusters[i] for p2 in cluster])
+                    heapq.heappush(heap, (new_dist, i, k))
+
+        # Assign labels
         labels = np.empty(n_samples, dtype=int)
-        for idx, cluster in enumerate(clusters):
-            for sample_idx in cluster:
-                labels[sample_idx] = idx
+        cluster_id = 0
+        for cluster in clusters:
+            if cluster is not None:
+                for idx in cluster:
+                    labels[idx] = cluster_id
+                cluster_id += 1
         self.labels_ = labels
         return labels
 
